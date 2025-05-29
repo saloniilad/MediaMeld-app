@@ -31,24 +31,38 @@ def text_to_audio(folder):
             return False
             
         with open(desc_file, "r") as f:
-            text = f.read()
+            text = f.read().strip()
+        
+        if not text:
+            logger.error(f"Description file is empty: {desc_file}")
+            return False
         
         logger.info(f"Generating audio for folder: {folder}")
         logger.info(f"Text content: {text[:100]}...")  # Log first 100 chars
         
-        text_to_speech_file(text, folder)
+        # Check if text_to_speech_file function exists and works
+        try:
+            result = text_to_speech_file(text, folder)
+            logger.info(f"text_to_speech_file returned: {result}")
+        except Exception as tts_error:
+            logger.error(f"Error in text_to_speech_file: {tts_error}")
+            return False
         
         # Verify audio file was created
         audio_file = os.path.join("user_uploads", folder, "audio.mp3")
         if os.path.exists(audio_file):
-            logger.info(f"Audio file successfully created: {audio_file}")
+            file_size = os.path.getsize(audio_file)
+            logger.info(f"Audio file successfully created: {audio_file} (size: {file_size} bytes)")
             return True
         else:
             logger.error(f"Audio file was not created: {audio_file}")
             return False
         
+    except FileNotFoundError as e:
+        logger.error(f"File not found in text_to_audio for {folder}: {e}")
+        return False
     except Exception as e:
-        logger.error(f"Error in text_to_audio for {folder}: {e}")
+        logger.error(f"Unexpected error in text_to_audio for {folder}: {e}")
         return False
 
 def create_reel(folder):
@@ -56,7 +70,7 @@ def create_reel(folder):
     try:
         input_file = os.path.join("user_uploads", folder, "input.txt")
         audio_file = os.path.join("user_uploads", folder, "audio.mp3")
-        output_file = os.path.join("user_uploads", folder, f"{folder}.mp4")  # Save in user folder instead of static/reels
+        output_file = os.path.join("user_uploads", folder, f"{folder}.mp4")
         
         logger.info(f"Creating reel for folder: {folder}")
         logger.info(f"Input file: {input_file}")
@@ -68,18 +82,44 @@ def create_reel(folder):
             logger.error(f"Input file not found: {input_file}")
             return False
         
-        # Read and log input file contents
+        # Read and validate input file contents
         with open(input_file, 'r') as f:
             input_content = f.read()
             logger.info(f"Input file content:\n{input_content}")
         
+        # Validate that all image files in input.txt actually exist
+        lines = input_content.strip().split('\n')
+        image_files = []
+        for line in lines:
+            if line.startswith('file '):
+                # Extract file path (remove 'file ' and quotes)
+                file_path = line[5:].strip().strip("'\"")
+                if os.path.exists(file_path):
+                    image_files.append(file_path)
+                    logger.info(f"Image file exists: {file_path}")
+                else:
+                    logger.error(f"Image file not found: {file_path}")
+                    return False
+        
+        if not image_files:
+            logger.error("No valid image files found in input.txt")
+            return False
+        
         # Check ffmpeg availability
         try:
-            result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
+            result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, timeout=10)
             logger.info("FFmpeg is available")
         except FileNotFoundError:
             logger.error("FFmpeg not found in system PATH")
             return False
+        except subprocess.TimeoutExpired:
+            logger.error("FFmpeg version check timed out")
+            return False
+        
+        # Convert paths to use forward slashes for FFmpeg (works on both Windows and Unix)
+        normalized_input_file = input_file.replace('\\', '/')
+        normalized_audio_file = audio_file.replace('\\', '/')
+        normalized_output_file = output_file.replace('\\', '/')
         
         # Build ffmpeg command
         if os.path.exists(audio_file):
@@ -88,15 +128,15 @@ def create_reel(folder):
                 'ffmpeg', '-y',  # -y to overwrite existing files
                 '-f', 'concat',
                 '-safe', '0',
-                '-i', input_file,
-                '-i', audio_file,
+                '-i', normalized_input_file,
+                '-i', normalized_audio_file,
                 '-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black',
                 '-c:v', 'libx264',
                 '-c:a', 'aac',
                 '-shortest',
                 '-r', '30',
                 '-pix_fmt', 'yuv420p',
-                output_file
+                normalized_output_file
             ]
         else:
             logger.info("Creating reel without audio (audio file not found)")
@@ -104,40 +144,48 @@ def create_reel(folder):
                 'ffmpeg', '-y',
                 '-f', 'concat',
                 '-safe', '0',
-                '-i', input_file,
+                '-i', normalized_input_file,
                 '-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black',
                 '-c:v', 'libx264',
                 '-shortest',
                 '-r', '30',
                 '-pix_fmt', 'yuv420p',
-                output_file
+                normalized_output_file
             ]
         
         logger.info(f"Running FFmpeg command: {' '.join(command)}")
         
-        # Run ffmpeg command
-        result = subprocess.run(command, capture_output=True, text=True, timeout=300)
-        
-        if result.returncode == 0:
-            logger.info(f"FFmpeg completed successfully")
-            if os.path.exists(output_file):
-                file_size = os.path.getsize(output_file)
-                logger.info(f"Output file created successfully: {output_file} (size: {file_size} bytes)")
-                return True
+        # Run ffmpeg command with detailed error capture
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=300)
+            
+            # Log both stdout and stderr regardless of return code
+            if result.stdout:
+                logger.info(f"FFmpeg stdout: {result.stdout}")
+            if result.stderr:
+                logger.info(f"FFmpeg stderr: {result.stderr}")
+            
+            if result.returncode == 0:
+                logger.info(f"FFmpeg completed successfully")
+                if os.path.exists(output_file):
+                    file_size = os.path.getsize(output_file)
+                    logger.info(f"Output file created successfully: {output_file} (size: {file_size} bytes)")
+                    return True
+                else:
+                    logger.error(f"FFmpeg reported success but output file not found: {output_file}")
+                    return False
             else:
-                logger.error(f"FFmpeg reported success but output file not found: {output_file}")
+                logger.error(f"FFmpeg failed with return code: {result.returncode}")
                 return False
-        else:
-            logger.error(f"FFmpeg failed with return code: {result.returncode}")
-            logger.error(f"FFmpeg stderr: {result.stderr}")
-            logger.error(f"FFmpeg stdout: {result.stdout}")
+                
+        except subprocess.TimeoutExpired:
+            logger.error(f"FFmpeg timeout for folder {folder}")
             return False
         
-    except subprocess.TimeoutExpired:
-        logger.error(f"FFmpeg timeout for folder {folder}")
-        return False
     except Exception as e:
         logger.error(f"Unexpected error creating reel for {folder}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return False
 
 @app.route("/")
@@ -214,22 +262,29 @@ def create():
             with open(input_txt_path, "w") as f:
                 for filename in input_files:
                     abs_path = os.path.abspath(os.path.join(user_folder, filename))
-                    f.write(f"file '{abs_path}'\nduration 1\n")
+                    # Convert Windows backslashes to forward slashes for FFmpeg compatibility
+                    normalized_path = abs_path.replace('\\', '/')
+                    f.write(f"file '{normalized_path}'\nduration 1\n")
             logger.info(f"Created input.txt at: {input_txt_path}")
+            
+            # Log the content of input.txt for debugging
+            with open(input_txt_path, 'r') as f:
+                input_content = f.read()
+                logger.info(f"Input.txt content:\n{input_content}")
             
             # Process immediately
             try:
                 logger.info(f"Starting immediate processing for {rec_id}")
                 
-                # Generate audio
+                # Generate audio (optional - continue even if it fails)
                 audio_success = text_to_audio(str(rec_id))
                 logger.info(f"Audio generation result: {audio_success}")
                 
-                # Create reel
+                # Create reel (with or without audio)
                 reel_success = create_reel(str(rec_id))
                 logger.info(f"Reel creation result: {reel_success}")
                 
-                if audio_success and reel_success:
+                if reel_success:  # Only require reel creation to succeed
                     logger.info(f"Successfully processed reel for {rec_id}")
                     # Return the reel file for download
                     reel_path = os.path.join(user_folder, f"{rec_id}.mp4")
@@ -237,10 +292,43 @@ def create():
                         return send_file(reel_path, as_attachment=True, download_name=f"reel_{rec_id}.mp4")
                     else:
                         logger.error(f"Reel file not found: {reel_path}")
-                        return "Error: Reel creation failed", 500
+                        return f"Error: Reel file not found at {reel_path}", 500
+                    logger.info(f"Successfully processed reel for {rec_id}")
+                    # Return the reel file for download
+                    reel_path = os.path.join(user_folder, f"{rec_id}.mp4")
+                    if os.path.exists(reel_path):
+                        return send_file(reel_path, as_attachment=True, download_name=f"reel_{rec_id}.mp4")
+                    else:
+                        logger.error(f"Reel file not found: {reel_path}")
+                        return f"Error: Reel file not found at {reel_path}", 500
                 else:
-                    logger.error(f"Failed to process reel for {rec_id}")
-                    return "Error: Failed to process reel", 500
+                    error_msg = f"Processing failed - Audio: {audio_success}, Reel: {reel_success}"
+                    logger.error(error_msg)
+                    
+                    # Additional debugging info
+                    debug_info = []
+                    desc_file = os.path.join(user_folder, "desc.txt")
+                    input_file = os.path.join(user_folder, "input.txt")
+                    audio_file = os.path.join(user_folder, "audio.mp3")
+                    
+                    debug_info.append(f"Description file exists: {os.path.exists(desc_file)}")
+                    debug_info.append(f"Input file exists: {os.path.exists(input_file)}")
+                    debug_info.append(f"Audio file exists: {os.path.exists(audio_file)}")
+                    
+                    if os.path.exists(desc_file):
+                        with open(desc_file, 'r') as f:
+                            desc_content = f.read()
+                            debug_info.append(f"Description content length: {len(desc_content)}")
+                    
+                    if os.path.exists(input_file):
+                        with open(input_file, 'r') as f:
+                            input_content = f.read()
+                            debug_info.append(f"Input file content: {input_content[:200]}...")
+                    
+                    debug_str = " | ".join(debug_info)
+                    logger.error(f"Debug info: {debug_str}")
+                    
+                    return f"Error: {error_msg} | Debug: {debug_str}", 500
                     
             except Exception as e:
                 logger.error(f"Error processing reel immediately: {e}")
@@ -368,6 +456,113 @@ def test_create_video():
         return jsonify({
             "success": False,
             "error": str(e)
+        })
+
+# Add debug route for testing text-to-audio
+@app.route("/test-audio")
+def test_audio():
+    """Test audio generation"""
+    try:
+        test_folder = "test_audio_" + str(uuid.uuid4())
+        test_path = os.path.join('user_uploads', test_folder)
+        os.makedirs(test_path, exist_ok=True)
+        
+        # Create a test description
+        test_text = "Hello, this is a test audio generation."
+        desc_file = os.path.join(test_path, "desc.txt")
+        with open(desc_file, 'w') as f:
+            f.write(test_text)
+        
+        # Test audio generation
+        audio_success = text_to_audio(test_folder)
+        
+        # Check if audio file was created
+        audio_file = os.path.join(test_path, "audio.mp3")
+        audio_exists = os.path.exists(audio_file)
+        audio_size = os.path.getsize(audio_file) if audio_exists else 0
+        
+        return jsonify({
+            "success": audio_success,
+            "audio_file_exists": audio_exists,
+            "audio_file_size": audio_size,
+            "test_folder": test_folder,
+            "desc_content": test_text
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
+
+# Add comprehensive debug route
+@app.route("/debug-processing")
+def debug_processing():
+    """Debug the entire processing pipeline"""
+    try:
+        test_folder = "debug_" + str(uuid.uuid4())
+        test_path = os.path.join('user_uploads', test_folder)
+        os.makedirs(test_path, exist_ok=True)
+        
+        debug_info = {
+            "test_folder": test_folder,
+            "test_path": test_path,
+            "steps": {}
+        }
+        
+        # Step 1: Create test description
+        test_text = "This is a debug test for reel generation."
+        desc_file = os.path.join(test_path, "desc.txt")
+        with open(desc_file, 'w') as f:
+            f.write(test_text)
+        debug_info["steps"]["1_desc_created"] = os.path.exists(desc_file)
+        
+        # Step 2: Create dummy input.txt (since we don't have images)
+        input_file = os.path.join(test_path, "input.txt")
+        # Create a simple colored image first
+        temp_image = os.path.join(test_path, "temp.png")
+        
+        # Create temporary image using ffmpeg
+        img_command = [
+            'ffmpeg', '-y',
+            '-f', 'lavfi',
+            '-i', 'color=blue:size=1080x1920:duration=0.1',
+            '-vframes', '1',
+            temp_image
+        ]
+        
+        img_result = subprocess.run(img_command, capture_output=True, text=True)
+        debug_info["steps"]["2_temp_image_created"] = os.path.exists(temp_image)
+        
+        if os.path.exists(temp_image):
+            with open(input_file, 'w') as f:
+                f.write(f"file '{os.path.abspath(temp_image)}'\nduration 1\n")
+            debug_info["steps"]["3_input_txt_created"] = os.path.exists(input_file)
+        
+        # Step 3: Test audio generation
+        audio_success = text_to_audio(test_folder)
+        debug_info["steps"]["4_audio_generation"] = audio_success
+        
+        audio_file = os.path.join(test_path, "audio.mp3")
+        debug_info["steps"]["4_audio_file_exists"] = os.path.exists(audio_file)
+        
+        # Step 4: Test reel creation
+        if audio_success and os.path.exists(input_file):
+            reel_success = create_reel(test_folder)
+            debug_info["steps"]["5_reel_creation"] = reel_success
+            
+            reel_file = os.path.join(test_path, f"{test_folder}.mp4")
+            debug_info["steps"]["5_reel_file_exists"] = os.path.exists(reel_file)
+            if os.path.exists(reel_file):
+                debug_info["steps"]["5_reel_file_size"] = os.path.getsize(reel_file)
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "debug_info": debug_info if 'debug_info' in locals() else {}
         })
 
 if __name__ == "__main__":
