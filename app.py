@@ -30,7 +30,7 @@ def text_to_audio(folder):
             logger.error(f"Description file not found: {desc_file}")
             return False
             
-        with open(desc_file, "r") as f:
+        with open(desc_file, "r", encoding='utf-8') as f:
             text = f.read().strip()
         
         if not text:
@@ -38,32 +38,47 @@ def text_to_audio(folder):
             return False
         
         logger.info(f"Generating audio for folder: {folder}")
-        logger.info(f"Text content: {text[:100]}...")  # Log first 100 chars
+        logger.info(f"Text content: {text}")
         
-        # Check if text_to_speech_file function exists and works
+        # Check if audio already exists
+        audio_file = os.path.join("user_uploads", folder, "audio.mp3")
+        if os.path.exists(audio_file) and os.path.getsize(audio_file) > 0:
+            logger.info(f"Audio file already exists: {audio_file}")
+            return True
+        
+        # Generate new audio
         try:
             result = text_to_speech_file(text, folder)
             logger.info(f"text_to_speech_file returned: {result}")
             
+            # Wait a moment for file to be written
+            import time
+            time.sleep(1)
+            
             # Verify audio file was created
-            audio_file = os.path.join("user_uploads", folder, "audio.mp3")
-            if os.path.exists(audio_file):
+            if os.path.exists(audio_file) and os.path.getsize(audio_file) > 0:
                 file_size = os.path.getsize(audio_file)
                 logger.info(f"Audio file successfully created: {audio_file} (size: {file_size} bytes)")
                 return True
             else:
-                logger.error(f"Audio file was not created: {audio_file}")
+                logger.error(f"Audio file was not created or is empty: {audio_file}")
                 return False
                 
         except Exception as tts_error:
             logger.error(f"Error in text_to_speech_file: {tts_error}")
+            # Check if file was created despite the error
+            if os.path.exists(audio_file) and os.path.getsize(audio_file) > 0:
+                logger.info(f"Audio file exists despite error - continuing")
+                return True
             return False
         
-    except FileNotFoundError as e:
-        logger.error(f"File not found in text_to_audio for {folder}: {e}")
-        return False
     except Exception as e:
         logger.error(f"Unexpected error in text_to_audio for {folder}: {e}")
+        # Check if audio file exists anyway
+        audio_file = os.path.join("user_uploads", folder, "audio.mp3")
+        if os.path.exists(audio_file) and os.path.getsize(audio_file) > 0:
+            logger.info(f"Audio file exists despite error - returning True")
+            return True
         return False
 
 def create_reel(folder):
@@ -261,12 +276,15 @@ def create():
         if input_files:
             input_txt_path = os.path.join(user_folder, "input.txt")
             with open(input_txt_path, "w", encoding='utf-8') as f:
-                for filename in input_files:
+                for i, filename in enumerate(input_files):
                     abs_path = os.path.abspath(os.path.join(user_folder, filename))
                     # Convert Windows backslashes to forward slashes for FFmpeg compatibility
                     normalized_path = abs_path.replace('\\', '/')
                     f.write(f"file '{normalized_path}'\n")
-                    f.write(f"duration 2\n")  # Increased duration for better visibility
+                    f.write(f"duration 3\n")  # 3 seconds per image
+                    # Add outpoint for last image to avoid ffmpeg issues
+                    if i == len(input_files) - 1:
+                        f.write(f"file '{normalized_path}'\n")
             logger.info(f"Created input.txt at: {input_txt_path}")
             
             # Log the content of input.txt for debugging
@@ -278,11 +296,11 @@ def create():
             try:
                 logger.info(f"Starting immediate processing for {rec_id}")
                 
-                # Generate audio (optional - continue even if it fails)
+                # Generate audio (check if it exists first)
                 audio_success = text_to_audio(str(rec_id))
                 logger.info(f"Audio generation result: {audio_success}")
                 
-                # Create reel (with or without audio)
+                # Always try to create reel, regardless of audio success
                 reel_success = create_reel(str(rec_id))
                 logger.info(f"Reel creation result: {reel_success}")
                 
@@ -381,6 +399,71 @@ def status():
         status_info["ffmpeg_error"] = "FFmpeg not found"
     
     return jsonify(status_info)
+
+@app.route("/test-input-format")
+def test_input_format():
+    """Test the input.txt format with a simple example"""
+    try:
+        test_folder = "input_test_" + str(uuid.uuid4())
+        test_path = os.path.join('user_uploads', test_folder)
+        os.makedirs(test_path, exist_ok=True)
+        
+        # Create a simple test image
+        test_image = os.path.join(test_path, "test.jpg")
+        img_command = [
+            'ffmpeg', '-y',
+            '-f', 'lavfi',
+            '-i', 'color=green:size=1080x1920:duration=0.1',
+            '-vframes', '1',
+            test_image
+        ]
+        
+        subprocess.run(img_command, capture_output=True, text=True)
+        
+        if not os.path.exists(test_image):
+            return jsonify({"error": "Could not create test image"})
+        
+        # Create input.txt
+        input_file = os.path.join(test_path, "input.txt")
+        abs_path = os.path.abspath(test_image).replace('\\', '/')
+        
+        with open(input_file, 'w', encoding='utf-8') as f:
+            f.write(f"file '{abs_path}'\n")
+            f.write(f"duration 3\n")
+            f.write(f"file '{abs_path}'\n")  # Duplicate last frame
+        
+        # Read back to verify
+        with open(input_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Test ffmpeg with this input
+        output_file = os.path.join(test_path, "test_output.mp4")
+        command = [
+            'ffmpeg', '-y',
+            '-f', 'concat', '-safe', '0',
+            '-i', input_file,
+            '-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black',
+            '-c:v', 'libx264', '-r', '30', '-pix_fmt', 'yuv420p',
+            output_file
+        ]
+        
+        result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+        
+        return jsonify({
+            "test_folder": test_folder,
+            "input_content": content,
+            "image_exists": os.path.exists(test_image),
+            "ffmpeg_return_code": result.returncode,
+            "ffmpeg_stderr": result.stderr,
+            "ffmpeg_stdout": result.stdout,
+            "output_created": os.path.exists(output_file),
+            "output_size": os.path.getsize(output_file) if os.path.exists(output_file) else 0
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "error": str(e)
+        })
 
 @app.route("/test-ffmpeg")
 def test_ffmpeg():
