@@ -78,11 +78,15 @@ def create():
 
     return render_template("create.html", myid=myid)
 
+import os
+from flask import render_template
+
 @app.route("/gallery")
 def gallery():
-    reels = os.listdir("static/reels")
-    print(reels)
+    reels_path = os.path.join('static', 'reels')
+    reels = [f for f in os.listdir(reels_path) if f.endswith(".mp4")]
     return render_template("gallery.html", reels=reels)
+
 
 import os
 
