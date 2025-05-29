@@ -56,15 +56,12 @@ def create_reel(folder):
     try:
         input_file = os.path.join("user_uploads", folder, "input.txt")
         audio_file = os.path.join("user_uploads", folder, "audio.mp3")
-        output_file = os.path.join("static", "reels", f"{folder}.mp4")
+        output_file = os.path.join("user_uploads", folder, f"{folder}.mp4")  # Save in user folder instead of static/reels
         
         logger.info(f"Creating reel for folder: {folder}")
         logger.info(f"Input file: {input_file}")
         logger.info(f"Audio file: {audio_file}")
         logger.info(f"Output file: {output_file}")
-        
-        # Ensure output directory exists
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
         
         # Check if input file exists
         if not os.path.exists(input_file):
@@ -234,37 +231,36 @@ def create():
                 
                 if audio_success and reel_success:
                     logger.info(f"Successfully processed reel for {rec_id}")
+                    # Return the reel file for download
+                    reel_path = os.path.join(user_folder, f"{rec_id}.mp4")
+                    if os.path.exists(reel_path):
+                        return send_file(reel_path, as_attachment=True, download_name=f"reel_{rec_id}.mp4")
+                    else:
+                        logger.error(f"Reel file not found: {reel_path}")
+                        return "Error: Reel creation failed", 500
                 else:
                     logger.error(f"Failed to process reel for {rec_id}")
+                    return "Error: Failed to process reel", 500
                     
             except Exception as e:
                 logger.error(f"Error processing reel immediately: {e}")
+                return f"Error: {str(e)}", 500
         
-        return redirect(url_for('gallery'))
+        return "Error: No files uploaded", 400
 
     return render_template("create.html", myid=myid)
 
 @app.route("/gallery")
 def gallery():
-    reels_path = os.path.join('static', 'reels')
-    os.makedirs(reels_path, exist_ok=True)
-    
-    try:
-        reels = [f for f in os.listdir(reels_path) if f.endswith(".mp4")]
-        reels.sort(reverse=True)  # Show newest first
-        logger.info(f"Found {len(reels)} reels in gallery: {reels}")
-    except FileNotFoundError:
-        reels = []
-        logger.info("No reels found - directory doesn't exist")
-    
-    return render_template("gallery.html", reels=reels)
+    # Gallery is now empty since we don't store reels in static/reels anymore
+    # You can remove this route or keep it for future use
+    return render_template("gallery.html", reels=[])
 
 @app.route("/status")
 def status():
     """Debug endpoint to check processing status"""
     status_info = {
         "uploads_folder_exists": os.path.exists("user_uploads"),
-        "reels_folder_exists": os.path.exists("static/reels"),
         "done_file_exists": os.path.exists("done.txt"),
         "current_working_directory": os.getcwd()
     }
@@ -284,29 +280,12 @@ def status():
                         "files": files,
                         "has_desc": "desc.txt" in files,
                         "has_input": "input.txt" in files,
-                        "has_audio": "audio.mp3" in files
+                        "has_audio": "audio.mp3" in files,
+                        "has_reel": any(f.endswith('.mp4') for f in files)
                     }
             status_info["folder_details"] = folder_details
         except Exception as e:
             status_info["upload_folders_error"] = str(e)
-    
-    if os.path.exists("static/reels"):
-        try:
-            reels = os.listdir("static/reels")
-            status_info["reels"] = reels
-            
-            # Get file sizes
-            reel_details = {}
-            for reel in reels:
-                reel_path = os.path.join("static/reels", reel)
-                if os.path.isfile(reel_path):
-                    reel_details[reel] = {
-                        "size_bytes": os.path.getsize(reel_path),
-                        "exists": True
-                    }
-            status_info["reel_details"] = reel_details
-        except Exception as e:
-            status_info["reels_error"] = str(e)
     
     # Check ffmpeg availability
     try:
@@ -332,9 +311,8 @@ def test_ffmpeg():
                 "ffmpeg_available": True,
                 "version": result.stdout.split('\n')[0],
                 "working_directory": os.getcwd(),
-                "can_write_static": os.access('static', os.W_OK),
-                "static_exists": os.path.exists('static'),
-                "reels_exists": os.path.exists('static/reels')
+                "can_write_uploads": os.access('user_uploads', os.W_OK),
+                "uploads_exists": os.path.exists('user_uploads')
             })
         else:
             return jsonify({
@@ -353,7 +331,9 @@ def test_ffmpeg():
 def test_create_video():
     """Create a simple test video"""
     try:
-        os.makedirs('static/reels', exist_ok=True)
+        test_folder = "test_" + str(uuid.uuid4())
+        test_path = os.path.join('user_uploads', test_folder)
+        os.makedirs(test_path, exist_ok=True)
         
         # Create a simple test video (solid color)
         command = [
@@ -362,13 +342,14 @@ def test_create_video():
             '-i', 'color=red:size=1080x1920:duration=2',
             '-c:v', 'libx264',
             '-pix_fmt', 'yuv420p',
-            'static/reels/test_video.mp4'
+            os.path.join(test_path, 'test_video.mp4')
         ]
         
         result = subprocess.run(command, capture_output=True, text=True, timeout=30)
         
-        if result.returncode == 0 and os.path.exists('static/reels/test_video.mp4'):
-            file_size = os.path.getsize('static/reels/test_video.mp4')
+        test_video_path = os.path.join(test_path, 'test_video.mp4')
+        if result.returncode == 0 and os.path.exists(test_video_path):
+            file_size = os.path.getsize(test_video_path)
             return jsonify({
                 "success": True,
                 "message": "Test video created successfully",
@@ -392,7 +373,6 @@ def test_create_video():
 if __name__ == "__main__":
     # Ensure required directories exist
     os.makedirs('user_uploads', exist_ok=True)
-    os.makedirs('static/reels', exist_ok=True)
     
     logger.info("Starting MediaMeld application")
     logger.info(f"Current working directory: {os.getcwd()}")
