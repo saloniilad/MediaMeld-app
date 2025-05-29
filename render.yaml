@@ -3,10 +3,11 @@ services:
     name: mediameld-app
     env: python
     buildCommand: |
+      apt-get update
+      apt-get install -y ffmpeg
       pip install -r requirements.txt
-      apt-get update && apt-get install -y ffmpeg
     startCommand: python app.py
     plan: free
     envVars:
       - key: PYTHON_VERSION
-        value: 3.9.16
+        value: 3.11.0
