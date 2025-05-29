@@ -1,0 +1,16 @@
+file 'download.jpg'
+duration 1
+file 'images.jpg'
+duration 1
+file 'myself.jpg'
+duration 1
+file 'images.jpg'
+duration 1
+file 'download.jpg'
+duration 1
+file 'myself.jpg'
+duration 1
+file 'download.jpg'
+duration 1
+file 'myself.jpg'
+duration 1

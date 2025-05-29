@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Homepage - MediaMeld{% endblock %}
+
+{% block content %}
+<section class="hero-section">
+    <div class="container">
+        <h1 class="hero-title">Create Stunning Reels & Merge PDFs Instantly</h1>
+        <p class="hero-subtitle">
+            Use our AI-powered platform to generate Instagram reels from images and text, and merge your PDF files seamlessly — no sign-up required!
+        </p>
+        <a href="/create" class="cta-button">Start Creating Now</a>
+    </div>
+</section>
+
+<section class="features-section">
+    <div class="container">
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <i class="fas fa-video feature-icon"></i>
+                    <h3>AI Reel Maker</h3>
+                    <p>Automatically transform images and descriptions into eye-catching video reels</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <i class="fas fa-file-pdf feature-icon"></i>
+                    <h3>PDF Merger</h3>
+                    <p>Combine multiple PDFs into a single file with just a few clicks</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <i class="fas fa-bolt feature-icon"></i>
+                    <h3>Fast & Easy</h3>
+                    <p>Instant results — upload, process, and download without any hassle</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="showcase-section">
+    <div class="container">
+        <h2 class="showcase-title">Your Creations</h2>
+        <div class="image-grid">
+            <img src="{{ url_for('static', filename='1.jpg') }}" alt="Reel Example 1" class="showcase-image">
+            <img src="{{ url_for('static', filename='2.jpg') }}" alt="Reel Example 2" class="showcase-image">
+            <img src="{{ url_for('static', filename='3.jpg') }}" alt="Reel Example 3" class="showcase-image">
+            <img src="{{ url_for('static', filename='4.jpg') }}" alt="Reel Example 4" class="showcase-image">
+            <img src="{{ url_for('static', filename='5.jpg') }}" alt="Reel Example 5" class="showcase-image">
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+
+ 

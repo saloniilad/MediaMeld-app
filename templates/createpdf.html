@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Merge PDFs - MediaMeld{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        background-color: #f2f5f9;
+    }
+
+    .merge-section {
+        display: flex;
+        justify-content: center;
+        padding: 40px 20px;
+    }
+
+    .merge-box {
+        background-color: #fff;
+        padding: 30px;
+        max-width: 600px;
+        width: 100%;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    }
+
+    .merge-title {
+        text-align: center;
+        font-size: 28px;
+        margin-bottom: 10px;
+        color: #2d3748;
+    }
+
+    .merge-subtitle {
+        text-align: center;
+        font-size: 14px;
+        color: #718096;
+        margin-bottom: 30px;
+    }
+
+    .file-input-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .file-input {
+        flex: 1;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+
+    .remove-btn {
+        background-color: #e53e3e;
+        color: white;
+        border: none;
+        padding: 6px 10px;
+        font-size: 16px;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .add-file-btn {
+        margin-top: 10px;
+        padding: 8px 16px;
+        background-color: #4299e1;
+        color: white;
+        font-weight: bold;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        display: block;
+        width: 100%;
+    }
+
+    .submit-btn {
+        margin-top: 20px;
+        padding: 12px;
+        background-color: #38a169;
+        color: white;
+        width: 100%;
+        font-size: 16px;
+        font-weight: bold;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .submit-btn:hover {
+        background-color: #2f855a;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="merge-section">
+    <div class="merge-box">
+        <h1 class="merge-title">Merge Your PDF Files</h1>
+        <p class="merge-subtitle">Upload and combine multiple PDF files into one document.</p>
+
+        <form action="/createpdf" method="POST" enctype="multipart/form-data" id="pdfMergeForm">
+            <div id="fileInputs">
+                <div class="file-input-group">
+                    <input name="file1" type="file" class="file-input" accept="application/pdf" required>
+                    <input name="uuid" type="hidden" value="{{ myid }}">
+                    <button type="button" class="remove-btn" onclick="removeFileInput(this)" disabled>&times;</button>
+                </div>
+            </div>
+
+            <button type="button" class="add-file-btn" onclick="addFileInput()">+ Add another PDF</button>
+
+            <button type="submit" class="submit-btn">Merge PDFs</button>
+        </form>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let fileCounter = 2;
+
+    function addFileInput() {
+        const container = document.getElementById("fileInputs");
+        const newDiv = document.createElement("div");
+        newDiv.className = "file-input-group";
+        newDiv.innerHTML = `
+            <input name="file${fileCounter}" type="file" class="file-input" accept="application/pdf" required />
+            <button type="button" class="remove-btn" onclick="removeFileInput(this)">&times;</button>
+        `;
+        container.appendChild(newDiv);
+        fileCounter++;
+    }
+
+    function removeFileInput(button) {
+        const group = button.parentElement;
+        group.remove();
+    }
+</script>
+{% endblock %}
