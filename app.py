@@ -44,18 +44,19 @@ def text_to_audio(folder):
         try:
             result = text_to_speech_file(text, folder)
             logger.info(f"text_to_speech_file returned: {result}")
+            
+            # Verify audio file was created
+            audio_file = os.path.join("user_uploads", folder, "audio.mp3")
+            if os.path.exists(audio_file):
+                file_size = os.path.getsize(audio_file)
+                logger.info(f"Audio file successfully created: {audio_file} (size: {file_size} bytes)")
+                return True
+            else:
+                logger.error(f"Audio file was not created: {audio_file}")
+                return False
+                
         except Exception as tts_error:
             logger.error(f"Error in text_to_speech_file: {tts_error}")
-            return False
-        
-        # Verify audio file was created
-        audio_file = os.path.join("user_uploads", folder, "audio.mp3")
-        if os.path.exists(audio_file):
-            file_size = os.path.getsize(audio_file)
-            logger.info(f"Audio file successfully created: {audio_file} (size: {file_size} bytes)")
-            return True
-        else:
-            logger.error(f"Audio file was not created: {audio_file}")
             return False
         
     except FileNotFoundError as e:
@@ -252,23 +253,24 @@ def create():
         # Save description
         if desc:
             desc_path = os.path.join(user_folder, "desc.txt")
-            with open(desc_path, "w") as f:
+            with open(desc_path, "w", encoding='utf-8') as f:
                 f.write(desc)
             logger.info(f"Saved description to: {desc_path}")
         
         # Create input.txt for ffmpeg
         if input_files:
             input_txt_path = os.path.join(user_folder, "input.txt")
-            with open(input_txt_path, "w") as f:
+            with open(input_txt_path, "w", encoding='utf-8') as f:
                 for filename in input_files:
                     abs_path = os.path.abspath(os.path.join(user_folder, filename))
                     # Convert Windows backslashes to forward slashes for FFmpeg compatibility
                     normalized_path = abs_path.replace('\\', '/')
-                    f.write(f"file '{normalized_path}'\nduration 1\n")
+                    f.write(f"file '{normalized_path}'\n")
+                    f.write(f"duration 2\n")  # Increased duration for better visibility
             logger.info(f"Created input.txt at: {input_txt_path}")
             
             # Log the content of input.txt for debugging
-            with open(input_txt_path, 'r') as f:
+            with open(input_txt_path, 'r', encoding='utf-8') as f:
                 input_content = f.read()
                 logger.info(f"Input.txt content:\n{input_content}")
             
@@ -293,14 +295,6 @@ def create():
                     else:
                         logger.error(f"Reel file not found: {reel_path}")
                         return f"Error: Reel file not found at {reel_path}", 500
-                    logger.info(f"Successfully processed reel for {rec_id}")
-                    # Return the reel file for download
-                    reel_path = os.path.join(user_folder, f"{rec_id}.mp4")
-                    if os.path.exists(reel_path):
-                        return send_file(reel_path, as_attachment=True, download_name=f"reel_{rec_id}.mp4")
-                    else:
-                        logger.error(f"Reel file not found: {reel_path}")
-                        return f"Error: Reel file not found at {reel_path}", 500
                 else:
                     error_msg = f"Processing failed - Audio: {audio_success}, Reel: {reel_success}"
                     logger.error(error_msg)
@@ -316,14 +310,14 @@ def create():
                     debug_info.append(f"Audio file exists: {os.path.exists(audio_file)}")
                     
                     if os.path.exists(desc_file):
-                        with open(desc_file, 'r') as f:
+                        with open(desc_file, 'r', encoding='utf-8') as f:
                             desc_content = f.read()
                             debug_info.append(f"Description content length: {len(desc_content)}")
                     
                     if os.path.exists(input_file):
-                        with open(input_file, 'r') as f:
+                        with open(input_file, 'r', encoding='utf-8') as f:
                             input_content = f.read()
-                            debug_info.append(f"Input file content: {input_content[:200]}...")
+                            debug_info.append(f"Input file content: {input_content}")
                     
                     debug_str = " | ".join(debug_info)
                     logger.error(f"Debug info: {debug_str}")
@@ -332,6 +326,8 @@ def create():
                     
             except Exception as e:
                 logger.error(f"Error processing reel immediately: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 return f"Error: {str(e)}", 500
         
         return "Error: No files uploaded", 400
@@ -386,7 +382,6 @@ def status():
     
     return jsonify(status_info)
 
-# Add this route to your app.py for testing
 @app.route("/test-ffmpeg")
 def test_ffmpeg():
     """Test FFmpeg functionality"""
@@ -414,7 +409,6 @@ def test_ffmpeg():
             "error": str(e)
         })
 
-# Add this simple test route to create a dummy video
 @app.route("/test-create-video")
 def test_create_video():
     """Create a simple test video"""
@@ -458,7 +452,6 @@ def test_create_video():
             "error": str(e)
         })
 
-# Add debug route for testing text-to-audio
 @app.route("/test-audio")
 def test_audio():
     """Test audio generation"""
@@ -470,7 +463,7 @@ def test_audio():
         # Create a test description
         test_text = "Hello, this is a test audio generation."
         desc_file = os.path.join(test_path, "desc.txt")
-        with open(desc_file, 'w') as f:
+        with open(desc_file, 'w', encoding='utf-8') as f:
             f.write(test_text)
         
         # Test audio generation
@@ -495,7 +488,6 @@ def test_audio():
             "error": str(e)
         })
 
-# Add comprehensive debug route
 @app.route("/debug-processing")
 def debug_processing():
     """Debug the entire processing pipeline"""
@@ -513,7 +505,7 @@ def debug_processing():
         # Step 1: Create test description
         test_text = "This is a debug test for reel generation."
         desc_file = os.path.join(test_path, "desc.txt")
-        with open(desc_file, 'w') as f:
+        with open(desc_file, 'w', encoding='utf-8') as f:
             f.write(test_text)
         debug_info["steps"]["1_desc_created"] = os.path.exists(desc_file)
         
@@ -535,8 +527,9 @@ def debug_processing():
         debug_info["steps"]["2_temp_image_created"] = os.path.exists(temp_image)
         
         if os.path.exists(temp_image):
-            with open(input_file, 'w') as f:
-                f.write(f"file '{os.path.abspath(temp_image)}'\nduration 1\n")
+            with open(input_file, 'w', encoding='utf-8') as f:
+                f.write(f"file '{os.path.abspath(temp_image)}'\n")
+                f.write(f"duration 2\n")
             debug_info["steps"]["3_input_txt_created"] = os.path.exists(input_file)
         
         # Step 3: Test audio generation
@@ -547,7 +540,7 @@ def debug_processing():
         debug_info["steps"]["4_audio_file_exists"] = os.path.exists(audio_file)
         
         # Step 4: Test reel creation
-        if audio_success and os.path.exists(input_file):
+        if os.path.exists(input_file):
             reel_success = create_reel(test_folder)
             debug_info["steps"]["5_reel_creation"] = reel_success
             
