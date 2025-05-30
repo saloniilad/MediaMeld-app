@@ -1,0 +1,5 @@
+file 'C:/Users/smile/OneDrive/Desktop/Projects/MediaMeld-app/user_uploads/d013a137-3cef-11f0-ae30-1068382c2ada/images.jpg'
+duration 3
+file 'C:/Users/smile/OneDrive/Desktop/Projects/MediaMeld-app/user_uploads/d013a137-3cef-11f0-ae30-1068382c2ada/download.jpg'
+duration 3
+file 'C:/Users/smile/OneDrive/Desktop/Projects/MediaMeld-app/user_uploads/d013a137-3cef-11f0-ae30-1068382c2ada/download.jpg'

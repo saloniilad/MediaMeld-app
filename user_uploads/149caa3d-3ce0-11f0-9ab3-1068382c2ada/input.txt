@@ -1,4 +1,0 @@
-file 'C:/Users/smile/OneDrive/Desktop/Projects/MediaMeld-app/user_uploads/149caa3d-3ce0-11f0-9ab3-1068382c2ada/images.jpg'
-duration 1
-file 'C:/Users/smile/OneDrive/Desktop/Projects/MediaMeld-app/user_uploads/149caa3d-3ce0-11f0-9ab3-1068382c2ada/download.jpg'
-duration 1
